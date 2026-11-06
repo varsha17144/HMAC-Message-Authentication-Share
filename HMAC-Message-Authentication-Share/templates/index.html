@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive Message Integrity and Authentication Lab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <main class="container">
+
+    <header class="header">
+      <h1>Interactive Message Integrity &amp; Authentication Lab</h1>
+      <p class="subtitle">
+        Integrated Protocol Workflow: <strong>Sender</strong> ➔ <strong>Network / Attacker (Replay Attack Simulation &amp; Tampering)</strong> ➔ <strong>Receiver (Verification &amp; Security Analysis)</strong>
+      </p>
+      <div class="protocol-bar">
+        <span class="step-badge active">1. Sender (Sign)</span>
+        <span class="step-arrow">➔</span>
+        <span class="step-badge active">2. Network (Inspect / Tamper / Replay)</span>
+        <span class="step-arrow">➔</span>
+        <span class="step-badge active">3. Receiver (Verify &amp; Analyze)</span>
+      </div>
+    </header>
+
+    <!-- ============ STAGE 1: SENDER ============ -->
+    <section class="card" aria-labelledby="sender-heading">
+      <div class="card-header-row">
+        <h2 id="sender-heading">1 · Sender — Create Authenticated Message Packet</h2>
+        <span class="stage-tag">Origin</span>
+      </div>
+
+      <div class="notice-box info">
+        <strong>Freshness Binding Principle:</strong>
+        <p>
+          HMAC alone does not prevent replays because it is stateless. To defend against replay attacks,
+          the sender binds a <strong>timestamp</strong> and a unique <strong>nonce</strong> (Number used ONCE)
+          directly into the exact canonical data authenticated by HMAC:
+          <code>HMAC(K, timestamp || nonce || message)</code>.
+        </p>
+      </div>
+
+      <label for="sender-message">Message Content</label>
+      <textarea id="sender-message" rows="2"
+        placeholder="Enter any arbitrary message (e.g., Transfer 250 units to account 9821)">Transfer 250 units to account 9821</textarea>
+
+      <label for="sender-key">Shared Secret Key (shared only between sender &amp; receiver)</label>
+      <input type="text" id="sender-key" value="shared-secret-key" autocomplete="off" spellcheck="false" />
+
+      <div class="button-row">
+        <button id="btn-create-packet" class="btn primary" type="button">Create &amp; Sign Packet</button>
+        <button id="btn-create-stale" class="btn warning" type="button" title="Educational fixture: Generates a genuine packet with timestamp 3 minutes in the past">
+          Simulate Stale Packet (Age: 3m ago)
+        </button>
+        <button id="btn-sender-reset" class="btn" type="button">Reset</button>
+      </div>
+
+      <p class="note hidden" id="sender-error"></p>
+
+      <!-- Sender Generated Packet Inspector -->
+      <div id="sender-packet-view" class="packet-box hidden">
+        <span class="result-label">Generated Outgoing Packet (Transmitted by Sender)</span>
+        <div class="packet-grid">
+          <div><strong>Message:</strong> <span id="s-out-message" class="text-break"></span></div>
+          <div><strong>Timestamp (UTC):</strong> <span id="s-out-timestamp"></span></div>
+          <div><strong>Nonce:</strong> <code id="s-out-nonce" class="mono-inline"></code></div>
+          <div><strong>Canonical Envelope:</strong> <code id="s-out-canonical" class="mono text-break"></code></div>
+          <div class="full-width">
+            <strong>HMAC-SHA256 Tag (Authenticity &amp; Integrity):</strong>
+            <code id="s-out-hmac" class="mono highlight"></code>
+          </div>
+          <div class="full-width">
+            <span class="result-label" style="margin-top: 0.4rem;">Plain SHA-256 (no key, no freshness — integrity only):</span>
+            <code id="s-out-sha256" class="mono"></code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ STAGE 2: NETWORK & ATTACKER ============ -->
+    <section class="card" aria-labelledby="network-heading">
+      <div class="card-header-row">
+        <h2 id="network-heading">2 · Network &amp; Attacker — In-Transit Packet &amp; Attack Controls</h2>
+        <span class="stage-tag danger-tag">In-Transit Channel</span>
+      </div>
+
+      <p class="hint">
+        The packet is intercepted as it travels across the network. An on-path attacker can read,
+        tamper with, or replay intercepted packets. <em>Notice: The attacker does NOT possess the secret key,
+        so the sender's original HMAC tag is preserved during tampering!</em>
+      </p>
+
+      <div id="network-empty-notice" class="empty-state">
+        Create a message packet in Stage 1 above to observe and manipulate it on the network.
+      </div>
+
+      <div id="network-packet-panel" class="hidden">
+        <div class="packet-box active-transit">
+          <div class="packet-box-header">
+            <span class="result-label">Live In-Transit Packet (What the Receiver Will Receive)</span>
+            <span id="transit-status-badge" class="badge ok">UNTOUCHED GENUINE</span>
+          </div>
+
+          <label for="transit-message">In-Transit Message Field (Editable / Tamperable)</label>
+          <textarea id="transit-message" rows="2"></textarea>
+
+          <div class="packet-grid compact">
+            <div>
+              <label for="transit-timestamp">Timestamp</label>
+              <input type="text" id="transit-timestamp" class="mono-inline" />
+            </div>
+            <div>
+              <label for="transit-nonce">Nonce</label>
+              <input type="text" id="transit-nonce" class="mono-inline" />
+            </div>
+            <div class="full-width">
+              <label>Sender's Original HMAC Tag (Strictly Preserved):</label>
+              <code id="transit-hmac" class="mono highlight"></code>
+            </div>
+          </div>
+
+          <!-- Dynamic Diff Indicator -->
+          <div id="diff-indicator" class="diff-indicator hidden">
+            <strong>⚠️ Tamper Diff Detected:</strong>
+            <div id="diff-content" class="diff-content"></div>
+          </div>
+        </div>
+
+        <!-- Network Action Controls -->
+        <div class="button-row" style="margin-top: 1rem;">
+          <button id="btn-deliver-normal" class="btn primary" type="button">
+            Deliver Unmodified Packet
+          </button>
+          <button id="btn-tamper-msg" class="btn danger" type="button">
+            Tamper With Message
+          </button>
+          <button id="btn-replay-packet" class="btn warning" type="button" disabled>
+            Replay Captured Packet
+          </button>
+          <button id="btn-deliver-custom" class="btn" type="button">
+            Deliver Current In-Transit Packet
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ STAGE 3: RECEIVER ============ -->
+    <section class="card" aria-labelledby="receiver-heading">
+      <div class="card-header-row">
+        <h2 id="receiver-heading">3 · Receiver — Verification &amp; Security Analysis</h2>
+        <span class="stage-tag success-tag">Destination</span>
+      </div>
+
+      <label for="receiver-key">Receiver's Secret Key (must match sender's key to authenticate)</label>
+      <input type="text" id="receiver-key" value="shared-secret-key" autocomplete="off" spellcheck="false" />
+
+      <div class="button-row">
+        <button id="btn-receiver-verify" class="btn primary" type="button" disabled>Verify Incoming Packet</button>
+      </div>
+
+      <!-- Real Security Analysis Panel -->
+      <div id="receiver-analysis-panel" class="analysis-panel hidden" role="region" aria-label="Security Analysis Panel">
+        <div id="receiver-verdict" class="verdict" role="status">
+          <span id="receiver-verdict-icon"></span>
+          <div>
+            <strong id="receiver-verdict-title"></strong>
+            <p id="receiver-verdict-detail"></p>
+          </div>
+        </div>
+
+        <div class="analysis-grid">
+          <!-- 1. Cryptographic Check -->
+          <div class="analysis-item">
+            <span class="analysis-label">A. HMAC Cryptographic Check</span>
+            <span id="res-badge-crypto" class="badge"></span>
+            <div class="tag-compare">
+              <span>Transmitted: <code id="res-tag-received" class="mono-abbr"></code></span>
+              <span>Recomputed: <code id="res-tag-expected" class="mono-abbr"></code></span>
+            </div>
+          </div>
+
+          <!-- 2. Timestamp Freshness Check -->
+          <div class="analysis-item">
+            <span class="analysis-label">B. Timestamp Freshness Check</span>
+            <span id="res-badge-freshness" class="badge"></span>
+            <span id="res-freshness-detail" class="analysis-text"></span>
+          </div>
+
+          <!-- 3. Nonce Uniqueness Check -->
+          <div class="analysis-item">
+            <span class="analysis-label">C. Nonce Uniqueness / Replay Check</span>
+            <span id="res-badge-nonce" class="badge"></span>
+            <span id="res-nonce-detail" class="analysis-text"></span>
+          </div>
+
+          <!-- 4. Final Server Decision -->
+          <div class="analysis-item">
+            <span class="analysis-label">Server Decision &amp; Reason Code</span>
+            <span id="res-badge-decision" class="badge"></span>
+            <code id="res-server-code" class="mono-inline"></code>
+          </div>
+        </div>
+
+        <!-- Educational INS Security Properties -->
+        <div class="security-callout">
+          <h3>Security Properties</h3>
+          <ul class="property-list">
+            <li>
+              <strong>🔒 Confidentiality:</strong> <em>Not Provided.</em>
+              HMAC does not encrypt; the message remains in plaintext and is readable to anyone intercepting the network packet.
+            </li>
+            <li>
+              <strong>✍️ Non-Repudiation:</strong> <em>Not Provided.</em>
+              Because sender and receiver share the exact same symmetric key, either party could produce the tag. Asymmetric digital signatures (RSA/ECDSA) are required for non-repudiation.
+            </li>
+            <li>
+              <strong>🛡️ Integrity &amp; Authenticity:</strong> <em>Provided.</em>
+              Any modification to the message, timestamp, or nonce breaks the HMAC tag (avalanche effect). A matching tag proves the message was produced by someone possessing the shared secret key.
+            </li>
+            <li>
+              <strong>⏱️ Replay Defense (Freshness):</strong> <em>Provided via Timestamp &amp; Nonce Binding.</em>
+              Binding freshness parameters into the authenticated payload and enforcing an atomic server-side nonce cache prevents attackers from replaying captured genuine packets.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ STAGE 4: PROTOCOL AUDIT LOG & CONTROLS ============ -->
+    <section class="card" aria-labelledby="log-heading">
+      <div class="card-header-row">
+        <h2 id="log-heading">4 · Live Protocol Audit Log &amp; Demonstration Controls</h2>
+        <div class="header-action-group">
+          <button id="btn-reset-nonce-cache" class="btn small warning" type="button" title="Clear the receiver in-memory nonce cache">
+            Reset Nonce Cache
+          </button>
+          <button id="btn-clear-log" class="btn small" type="button">Clear Log</button>
+        </div>
+      </div>
+
+      <div id="log-container" class="log-container">
+        <div class="log-entry system">
+          <span class="log-time">[System Init]</span>
+          <span class="log-badge">READY</span>
+          <span class="log-text">Lab initialized. Create a packet in Stage 1 to begin.</span>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>
+        HMAC-SHA256 (RFC 2104) · Constant-time tag verification (<code>hmac.compare_digest</code>) ·
+        Atomic Nonce Cache with sliding timestamp tolerance (±120s).
+      </p>
+    </footer>
+
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
